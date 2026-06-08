@@ -4,12 +4,23 @@ import crypto from 'crypto';
 import https from 'https';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
 const app = express();
-app.use(cors());
+
+// 2. CORS Restriction (Only allow frontend origin)
+app.use(cors({ origin: 'http://localhost:5173' }));
 app.use(express.json());
+
+// 3. API Rate Limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: { success: false, error: 'Too many requests, please try again later.' }
+});
+app.use('/api/', apiLimiter);
 
 const PORT = process.env.PORT || 3001;
 
@@ -161,9 +172,25 @@ async function fetchYahooPrices(requestedSymbols, forceRefresh = false) {
 
 app.get('/api/prices', async (req, res) => {
   try {
-    const symbolsParam = req.query.symbols || 'PTT,AOT,CPALL,ADVANC,KBANK,GULF,BDMS,BBL,SCC,DELTA';
+    let symbolsParam = req.query.symbols;
+    if (!symbolsParam) {
+      symbolsParam = 'PTT,AOT,CPALL,ADVANC,KBANK,GULF,BDMS,BBL,SCC,DELTA';
+    } else if (typeof symbolsParam !== 'string' || symbolsParam.length > 300) {
+      return res.status(400).json({ success: false, error: 'Invalid request' });
+    }
+
     const forceRefresh = req.query.force === 'true';
-    const requestedSymbols = symbolsParam.split(',').map(s => s.trim().toUpperCase());
+    
+    // 4. Input Validation & Sanitization
+    const validSymbolRegex = /^[A-Z0-9.\^]+$/;
+    const requestedSymbols = symbolsParam
+      .split(',')
+      .map(s => s.trim().toUpperCase())
+      .filter(s => s && validSymbolRegex.test(s));
+
+    if (requestedSymbols.length === 0 || requestedSymbols.length > 50) {
+      return res.status(400).json({ success: false, error: 'Invalid symbols' });
+    }
 
     // 1. Try to maintain Settrade API Login (Priority 1)
     try {
@@ -181,10 +208,11 @@ app.get('/api/prices', async (req, res) => {
       data: realPrices
     });
   } catch (error) {
-    res.json({
+    console.error('[Prices API] Error:', error);
+    res.status(500).json({
       source: 'Error',
       success: false,
-      error: error.message,
+      error: 'Internal Server Error', // 5. Error Information Leakage Prevention
       data: {}
     });
   }
@@ -193,10 +221,16 @@ app.get('/api/prices', async (req, res) => {
 app.post('/api/analyze', async (req, res) => {
   try {
     const { stocksData } = req.body;
+    
+    // 4. Input Validation
+    if (!stocksData || !Array.isArray(stocksData) || stocksData.length > 100) {
+      return res.status(400).json({ success: false, error: 'Invalid payload' });
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      return res.status(500).json({ success: false, error: 'GEMINI_API_KEY is not configured in .env' });
+      return res.status(500).json({ success: false, error: 'API Key not configured' });
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -238,7 +272,7 @@ Respond ONLY with a valid JSON array matching this exact format, with no markdow
 
   } catch (error) {
     console.error('[Gemini API] Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal Server Error' }); // 5. Error Information Leakage Prevention
   }
 });
 
