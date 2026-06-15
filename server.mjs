@@ -13,32 +13,10 @@ dotenv.config();
 
 const app = express();
 
-// 2. CORS Restriction (Allow local development and same-origin ports)
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001',
-  'http://127.0.0.1'
-];
+// 2. CORS (Allow all origins dynamically to support deployment on server IPs/domains)
 app.use(cors({
-  origin: (origin, callback) => {
-    if (
-      !origin || 
-      allowedOrigins.indexOf(origin) !== -1 || 
-      origin.startsWith('http://localhost:') || 
-      origin.startsWith('http://127.0.0.1:') ||
-      origin === 'http://localhost' || 
-      origin === 'http://127.0.0.1'
-    ) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  }
+  origin: true,
+  credentials: true
 }));
 app.use(express.json());
 
