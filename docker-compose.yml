@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  botstock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SETTRADE_USERNAME=${SETTRADE_USERNAME}
+      - SETTRADE_APP_ID=${SETTRADE_APP_ID}
+      - SETTRADE_APP_SECRET=${SETTRADE_APP_SECRET}
+      - SETTRADE_BROKER_ID=${SETTRADE_BROKER_ID}
+      - SETTRADE_APP_CODE=${SETTRADE_APP_CODE}
+    env_file:
+      - .env
+    restart: always

@@ -1,4 +1,7 @@
 import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import crypto from 'crypto';
 import https from 'https';
@@ -10,8 +13,24 @@ dotenv.config();
 
 const app = express();
 
-// 2. CORS Restriction (Only allow frontend origin)
-app.use(cors({ origin: 'http://localhost:5173' }));
+// 2. CORS Restriction (Allow local development and same-origin ports)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001'
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 app.use(express.json());
 
 // 3. API Rate Limiting
@@ -275,6 +294,18 @@ Respond ONLY with a valid JSON array matching this exact format, with no markdow
     res.status(500).json({ success: false, error: 'Internal Server Error' }); // 5. Error Information Leakage Prevention
   }
 });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.join(__dirname, 'dist');
+
+if (fs.existsSync(distPath)) {
+  console.log(`[API Gateway] Serving static files from ${distPath}`);
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`[API Gateway] Server running on http://localhost:${PORT}`);

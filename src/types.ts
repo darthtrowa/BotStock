@@ -11,6 +11,7 @@ export interface Stock {
   changePercent: number;
   volume: number;
   history: number[]; // ราคาย้อนหลังเพื่อแสดงผลใน Sparkline (10 จุดล่าสุด)
+  theme?: string;
 }
 
 export interface TradeSignal {
@@ -71,6 +72,7 @@ export interface BotLearningState {
   macdThreshold: number;
   maxHoldingDays: number;
   sellOnlyOnTarget: boolean;
+  marketBreadth?: number;
 }
 
 export interface BotLearningLog {

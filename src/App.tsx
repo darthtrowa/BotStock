@@ -46,6 +46,19 @@ function generateTechnicalAnalysis(stock: Stock, offerPrice: number, botBrain: B
   const tpMultiplier = 1 + botBrain.takeProfitMargin; // e.g. 1.05
   const slMultiplier = 1 - botBrain.stopLossMargin;   // e.g. 0.97
   
+  const isVDU = stock.volume > 0 && stock.volume < 45000000;
+  const isPPBP = stock.changePercent > 0.5 && stock.volume > 60000000;
+  const isBGU = stock.changePercent > 1.2;
+  const is52W = stock.currentPrice >= stock.highPrice * 0.95;
+
+  const patterns = [];
+  if (isVDU) patterns.push('Volume Dry-Up (VDU)');
+  if (isPPBP) patterns.push('Pocket Pivot (PPBP)');
+  if (isBGU) patterns.push('Buyable Gap-Up (BGU)');
+  if (is52W) patterns.push('52-Week High (52W)');
+  
+  const confluenceStr = patterns.length > 0 ? ` (พบสัญญาณ Confluence: ${patterns.join(' + ')})` : '';
+
   // Setup 1: Breakout & Momentum (หุ้นกำลังวิ่งแรง)
   if (stock.changePercent >= 0.5) {
     const targetPrice = Math.round(offerPrice * tpMultiplier * 100) / 100;
@@ -53,7 +66,7 @@ function generateTechnicalAnalysis(stock: Stock, offerPrice: number, botBrain: B
     return {
       targetPrice,
       stopLoss,
-      reason: `MACD ตัดขึ้น Signal (Breakout) เป้าทำกำไร +${(botBrain.takeProfitMargin*100).toFixed(1)}% (฿${targetPrice.toFixed(2)}) และตัดขาดทุนที่ -${(botBrain.stopLossMargin*100).toFixed(1)}%`
+      reason: `MACD ตัดขึ้น Signal (Breakout)${confluenceStr} เป้าทำกำไร +${(botBrain.takeProfitMargin*100).toFixed(1)}% (฿${targetPrice.toFixed(2)}) และตัดขาดทุนที่ -${(botBrain.stopLossMargin*100).toFixed(1)}%`
     };
   }
   
@@ -64,7 +77,7 @@ function generateTechnicalAnalysis(stock: Stock, offerPrice: number, botBrain: B
     return {
       targetPrice,
       stopLoss,
-      reason: `รอเด้งโซนล่าง (RSI จำลอง < ${Math.round(botBrain.rsiThreshold)}) หากไม่หลุด ฿${stopLoss.toFixed(2)} มีลุ้นเด้งทำกำไร +${(botBrain.takeProfitMargin*100).toFixed(1)}%`
+      reason: `รอเด้งโซนล่าง (RSI จำลอง < ${Math.round(botBrain.rsiThreshold)})${confluenceStr} หากไม่หลุด ฿${stopLoss.toFixed(2)} มีลุ้นเด้งทำกำไร +${(botBrain.takeProfitMargin*100).toFixed(1)}%`
     };
   }
 
@@ -74,7 +87,7 @@ function generateTechnicalAnalysis(stock: Stock, offerPrice: number, botBrain: B
   return {
     targetPrice,
     stopLoss,
-    reason: `พักตัวสะสมพลังบน EMA โอกาสยกตัวไป ฿${targetPrice.toFixed(2)} หากหลุด ฿${stopLoss.toFixed(2)} ให้ตัดขาดทุนทันที`
+    reason: `พักตัวสะสมพลังบน EMA${confluenceStr} โอกาสยกตัวไป ฿${targetPrice.toFixed(2)} หากหลุด ฿${stopLoss.toFixed(2)} ให้ตัดขาดทุนทันที`
   };
 }
 
@@ -638,6 +651,25 @@ export default function App() {
   };
 
   const updatePerfHistory = (currentStocksList: Stock[], currentSetPrice: number) => {
+    let aboveMA = 0;
+    let validCount = 0;
+    currentStocksList.forEach(stock => {
+      if (stock.history && stock.history.length > 0) {
+        const avg = stock.history.reduce((a, b) => a + b, 0) / stock.history.length;
+        if (stock.currentPrice > avg) {
+          aboveMA++;
+        }
+        validCount++;
+      }
+    });
+    const breadth = validCount > 0 ? Math.round((aboveMA / validCount) * 100) : 50;
+
+    setBotBrain(prevBrain => {
+      const nextBrain = { ...prevBrain, marketBreadth: breadth };
+      localStorage.setItem('botstock_brain', JSON.stringify(nextBrain));
+      return nextBrain;
+    });
+
     setBotPortfolio(prevBotPort => {
       const holdingsValue = prevBotPort.positions.reduce((sum, pos) => {
         const stock = currentStocksList.find(s => s.symbol === pos.symbol);
