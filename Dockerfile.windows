@@ -6,7 +6,8 @@ WORKDIR /app
 # สั่งดาวน์โหลดและติดตั้ง Node.js 20.11.0 (LTS) แบบเงียบผ่าน PowerShell
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
-RUN Invoke-WebRequest -OutFile node.zip https://nodejs.org/dist/v20.11.0/node-v20.11.0-win-x64.zip; \
+RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+    Invoke-WebRequest -UseBasicParsing -OutFile node.zip https://nodejs.org/dist/v20.11.0/node-v20.11.0-win-x64.zip; \
     Expand-Archive node.zip -DestinationPath C:\; \
     Rename-Item "C:\node-v20.11.0-win-x64" C:\nodejs
 
