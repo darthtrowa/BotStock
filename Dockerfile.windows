@@ -7,9 +7,9 @@ WORKDIR /app
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
 RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
-    Invoke-WebRequest -UseBasicParsing -OutFile node.zip https://nodejs.org/dist/v20.11.0/node-v20.11.0-win-x64.zip; \
+    Invoke-WebRequest -UseBasicParsing -OutFile node.zip https://nodejs.org/dist/v22.13.0/node-v22.13.0-win-x64.zip; \
     Expand-Archive node.zip -DestinationPath C:\; \
-    Rename-Item "C:\node-v20.11.0-win-x64" C:\nodejs
+    Rename-Item "C:\node-v22.13.0-win-x64" C:\nodejs
 
 # ทำการแมป PATH ของระบบให้เรียกใช้งาน node และ npm ได้
 ENV PATH="C:\nodejs;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0"
