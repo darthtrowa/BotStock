@@ -1,0 +1,42 @@
+# Stage 1: Build the React application (ใช้ Windows Server 2019 Core สำหรับการบิลด์)
+FROM node:20-windowsservercore-1809 AS builder
+
+WORKDIR /app
+
+# Copy package.json และ package-lock.json
+COPY package*.json ./
+
+# Install dependencies ทั้งหมด
+RUN npm ci
+
+# Copy ซอร์สโค้ดทั้งหมด
+COPY . .
+
+# Build React Client
+RUN npm run build
+
+# Stage 2: Run the production server (ใช้ Nanoserver 2019 เพื่อประหยัดเนื้อที่ในรันไทม์)
+FROM node:20-nanoserver-1809
+
+WORKDIR /app
+
+COPY package*.json ./
+
+# ติดตั้งเฉพาะ Production dependencies
+RUN npm ci --only=production
+
+# คัดลอก static assets จาก builder stage
+COPY --from=builder /app/dist ./dist
+
+# คัดลอก server entry point
+COPY server.mjs ./
+
+# Set Environment Variables
+ENV PORT=3001
+ENV NODE_ENV=production
+
+# Expose port
+EXPOSE 3001
+
+# รันด้วยคำสั่ง Node
+CMD ["node", "server.mjs"]
