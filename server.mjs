@@ -251,7 +251,7 @@ app.post('/api/analyze', async (req, res) => {
     const { stocksData } = req.body;
     
     // 4. Input Validation
-    if (!stocksData || !Array.isArray(stocksData) || stocksData.length > 100) {
+    if (!stocksData || !Array.isArray(stocksData) || stocksData.length > 200) {
       return res.status(400).json({ success: false, error: 'Invalid payload' });
     }
 
