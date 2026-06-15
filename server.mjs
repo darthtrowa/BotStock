@@ -316,7 +316,7 @@ if (fs.existsSync(distPath)) {
   app.get('/botstock', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
-  app.get('/botstock/*', (req, res) => {
+  app.get('/botstock/*splat', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
   
