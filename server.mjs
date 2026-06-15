@@ -18,13 +18,22 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001'
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1'
 ];
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+    if (
+      !origin || 
+      allowedOrigins.indexOf(origin) !== -1 || 
+      origin.startsWith('http://localhost:') || 
+      origin.startsWith('http://127.0.0.1:') ||
+      origin === 'http://localhost' || 
+      origin === 'http://127.0.0.1'
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -300,10 +309,20 @@ const __dirname = path.dirname(__filename);
 const distPath = path.join(__dirname, 'dist');
 
 if (fs.existsSync(distPath)) {
-  console.log(`[API Gateway] Serving static files from ${distPath}`);
-  app.use(express.static(distPath));
-  app.get('*', (req, res) => {
+  console.log(`[API Gateway] Serving static files from ${distPath} at /botstock`);
+  app.use('/botstock', express.static(distPath));
+  
+  // Route for the main /botstock path and sub-paths
+  app.get('/botstock', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
+  });
+  app.get('/botstock/*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+  
+  // Redirect root / to /botstock/
+  app.get('/', (req, res) => {
+    res.redirect('/botstock/');
   });
 }
 
