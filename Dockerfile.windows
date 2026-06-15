@@ -1,42 +1,53 @@
-# Stage 1: Build the React application (ใช้ Windows Server 2019 Core สำหรับการบิลด์)
-FROM node:20-windowsservercore-1809 AS builder
+# Stage 1: Build the React application (ใช้ Windows Server Core 2019 และติดตั้ง Node.js 20)
+FROM mcr.microsoft.com/windows/servercore:1809 AS builder
 
 WORKDIR /app
 
-# Copy package.json และ package-lock.json
-COPY package*.json ./
+# สั่งดาวน์โหลดและติดตั้ง Node.js 20.11.0 (LTS) แบบเงียบผ่าน PowerShell
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
-# Install dependencies ทั้งหมด
+RUN Invoke-WebRequest -OutFile node.zip https://nodejs.org/dist/v20.11.0/node-v20.11.0-win-x64.zip; \
+    Expand-Archive node.zip -DestinationPath C:\; \
+    Rename-Item "C:\node-v20.11.0-win-x64" C:\nodejs
+
+# ทำการแมป PATH ของระบบให้เรียกใช้งาน node และ npm ได้
+ENV PATH="C:\nodejs;${PATH}"
+
+# คัดลอกและติดตั้ง Dependencies
+COPY package*.json ./
 RUN npm ci
 
-# Copy ซอร์สโค้ดทั้งหมด
+# คัดลอกซอร์สโค้ดและทำการบิลด์ React Client
 COPY . .
-
-# Build React Client
 RUN npm run build
 
-# Stage 2: Run the production server (ใช้ Nanoserver 2019 เพื่อประหยัดเนื้อที่ในรันไทม์)
-FROM node:20-nanoserver-1809
+
+# Stage 2: Run the production server (ใช้ Windows Nanoserver 2019 ซึ่งขนาดเล็กและปลอดภัย)
+FROM mcr.microsoft.com/windows/nanoserver:1809
 
 WORKDIR /app
 
+# คัดลอกโฟลเดอร์ Node.js มาจาก Stage แรก
+COPY --from=builder C:\\nodejs C:\\nodejs
+
+# ตั้งค่า PATH ในรันไทม์เพื่อให้คอนเทนเนอร์เรียกใช้ Node ได้
+ENV PATH="C:\nodejs;${PATH}"
+
 COPY package*.json ./
 
-# ติดตั้งเฉพาะ Production dependencies
+# ติดตั้งเฉพาะ Dependencies สำหรับ Production เท่านั้น
 RUN npm ci --only=production
 
-# คัดลอก static assets จาก builder stage
+# คัดลอก static assets ที่ผ่านการบิลด์ React แล้ว และไฟล์ server.mjs
 COPY --from=builder /app/dist ./dist
-
-# คัดลอก server entry point
 COPY server.mjs ./
 
-# Set Environment Variables
+# กำหนดตัวแปรระบบ
 ENV PORT=3001
 ENV NODE_ENV=production
 
-# Expose port
+# เปิดพอร์ตใช้งาน
 EXPOSE 3001
 
-# รันด้วยคำสั่ง Node
+# รัน Backend server
 CMD ["node", "server.mjs"]
