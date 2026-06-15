@@ -1120,6 +1120,71 @@ export default function App() {
     addToast('เคลียร์ประวัติแล้ว', 'ลบประวัติคำสั่งบอทเรียบร้อย', 'warning');
   };
 
+  const handleExportData = () => {
+    const keys = [
+      'botstock_stocks',
+      'botstock_bot_portfolio',
+      'botstock_user_portfolio',
+      'botstock_signals',
+      'botstock_transactions',
+      'botstock_alert_logs',
+      'botstock_learning_logs',
+      'botstock_brain',
+      'botstock_brain_backfilled_v2'
+    ];
+    const data: Record<string, string> = {};
+    keys.forEach(k => {
+      const val = localStorage.getItem(k);
+      if (val !== null) data[k] = val;
+    });
+    
+    const jsonStr = JSON.stringify(data);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `botstock_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    addToast('สำรองข้อมูลสำเร็จ', 'ดาวน์โหลดไฟล์สำรองข้อมูลเรียบร้อยแล้ว', 'buy');
+  };
+
+  const handleImportData = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const jsonStr = e.target?.result as string;
+          const data = JSON.parse(jsonStr);
+          
+          const hasKeys = Object.keys(data).some(k => k.startsWith('botstock_'));
+          if (!hasKeys) {
+            alert('ไฟล์ข้อมูลสำรองไม่ถูกต้อง');
+            return;
+          }
+          
+          Object.keys(data).forEach(k => {
+            localStorage.setItem(k, data[k]);
+          });
+          
+          alert('นำเข้าข้อมูลเสร็จสมบูรณ์ ระบบจะทำการรีโหลดเพื่อแสดงผล');
+          window.location.reload();
+        } catch (err) {
+          alert('การนำเข้าข้อมูลล้มเหลว: รูปแบบไฟล์ไม่ถูกต้อง');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   const handleHardReset = () => {
     if (window.confirm('คุณต้องการรีเซ็ตระบบทั้งหมด ล้างประวัติ และกลับไปเริ่มต้นที่เงินสด 2,000 บาทหรือไม่?')) {
       localStorage.clear();
@@ -1260,9 +1325,24 @@ export default function App() {
             <span>โควตาผู้ใช้วันนี้:</span>
             <span className="font-number" style={{ color: '#fff', fontWeight: 600 }}>{userPortfolio.tradesToday} ธุรกรรม</span>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '12px' }}>
+            <button 
+              onClick={handleExportData}
+              style={{ padding: '6px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '6px', color: '#3b82f6', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontWeight: 'bold' }}
+            >
+              📥 สำรองข้อมูล
+            </button>
+            <button 
+              onClick={handleImportData}
+              style={{ padding: '6px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px', color: '#10b981', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontWeight: 'bold' }}
+            >
+              📤 นำเข้าข้อมูล
+            </button>
+          </div>
+
           <button 
             onClick={handleHardReset}
-            style={{ marginTop: '12px', width: '100%', padding: '6px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', color: 'var(--danger)', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            style={{ marginTop: '8px', width: '100%', padding: '6px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', color: 'var(--danger)', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
           >
             <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none">
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
