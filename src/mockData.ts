@@ -130,7 +130,8 @@ export const INITIAL_BOT_PORTFOLIO: Portfolio = {
   startingCapital: 2000.00,
   tradesToday: 0,
   lastTradeDate: todayStr,
-  positions: []
+  positions: [],
+  pendingOrders: []
 };
 
 export const INITIAL_USER_PORTFOLIO: Portfolio = {
@@ -138,7 +139,8 @@ export const INITIAL_USER_PORTFOLIO: Portfolio = {
   startingCapital: 2000.00,
   tradesToday: 0,
   lastTradeDate: todayStr,
-  positions: []
+  positions: [],
+  pendingOrders: []
 };
 
 export const INITIAL_BOT_SIGNALS: TradeSignal[] = [];

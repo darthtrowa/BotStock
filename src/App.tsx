@@ -117,7 +117,12 @@ export default function App() {
 
   const [userPortfolio, setUserPortfolio] = useState<Portfolio>(() => {
     const saved = localStorage.getItem('botstock_user_portfolio');
-    return saved ? JSON.parse(saved) : INITIAL_USER_PORTFOLIO;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (!parsed.pendingOrders) parsed.pendingOrders = [];
+      return parsed;
+    }
+    return INITIAL_USER_PORTFOLIO;
   });
 
   const [signals, setSignals] = useState<TradeSignal[]>(() => {
@@ -1005,14 +1010,144 @@ export default function App() {
           }
         }
       }
+
+      // --- USER PENDING ORDERS CHECK ---
+      setUserPortfolio(prevUserPort => {
+        if (!prevUserPort.pendingOrders || prevUserPort.pendingOrders.length === 0) return prevUserPort;
+
+        let updatedOrders = [...prevUserPort.pendingOrders];
+        let updatedPositions = [...prevUserPort.positions];
+        let updatedCash = prevUserPort.cash;
+        let newTransactions: Transaction[] = [];
+
+        updatedOrders.forEach(order => {
+          if (order.status !== 'PENDING') return;
+
+          const stock = stocksRef.current.find(s => s.symbol === order.symbol);
+          if (!stock) return;
+
+          if (order.type === 'BUY') {
+            if (stock.offerPrice <= order.targetPrice) {
+               const cost = order.quantity * stock.offerPrice;
+               if (updatedCash >= cost) {
+                 updatedCash -= cost;
+                 
+                 const existingPos = updatedPositions.find(p => p.symbol === order.symbol);
+                 if (existingPos) {
+                   const totalCost = (existingPos.quantity * existingPos.entryPrice) + cost;
+                   existingPos.quantity += order.quantity;
+                   existingPos.entryPrice = totalCost / existingPos.quantity;
+                 } else {
+                   updatedPositions.push({
+                     symbol: order.symbol,
+                     quantity: order.quantity,
+                     entryPrice: stock.offerPrice,
+                     currentPrice: stock.currentPrice,
+                     entryDate: getTodayDateString(),
+                     holdingDays: 0
+                   });
+                 }
+                 order.status = 'EXECUTED';
+                 newTransactions.push({
+                   id: `tx-user-buy-${Date.now()}`,
+                   symbol: order.symbol,
+                   type: 'BUY',
+                   quantity: order.quantity,
+                   price: stock.offerPrice,
+                   amount: cost,
+                   timestamp: new Date().toISOString(),
+                   owner: 'USER'
+                 });
+                 setTimeout(() => addToast(`Limit Buy สำเร็จ`, `ซื้อ ${order.symbol} อัตโนมัติ จำนวน ${order.quantity} หุ้น ที่ราคา ${stock.offerPrice}`, 'buy'), 0);
+               }
+            }
+          } else if (order.type === 'SELL') {
+            if (stock.bidPrice >= order.targetPrice) {
+               const existingPos = updatedPositions.find(p => p.symbol === order.symbol);
+               if (existingPos && existingPos.quantity >= order.quantity) {
+                 const revenue = order.quantity * stock.bidPrice;
+                 updatedCash += revenue;
+                 const realizedPnL = revenue - (order.quantity * existingPos.entryPrice);
+                 
+                 existingPos.quantity -= order.quantity;
+                 if (existingPos.quantity === 0) {
+                   updatedPositions = updatedPositions.filter(p => p.symbol !== order.symbol);
+                 }
+
+                 order.status = 'EXECUTED';
+                 newTransactions.push({
+                   id: `tx-user-sell-${Date.now()}`,
+                   symbol: order.symbol,
+                   type: 'SELL',
+                   quantity: order.quantity,
+                   price: stock.bidPrice,
+                   amount: revenue,
+                   timestamp: new Date().toISOString(),
+                   realizedPnL: realizedPnL,
+                   owner: 'USER'
+                 });
+                 setTimeout(() => addToast(`Limit Sell สำเร็จ`, `ขาย ${order.symbol} อัตโนมัติ จำนวน ${order.quantity} หุ้น ที่ราคา ${stock.bidPrice}`, 'sell'), 0);
+               } else {
+                 order.status = 'CANCELLED';
+                 setTimeout(() => addToast(`ยกเลิก Limit Sell`, `หุ้น ${order.symbol} ไม่พอขาย`, 'warning'), 0);
+               }
+            }
+          }
+        });
+
+        if (newTransactions.length > 0) {
+           setTransactions(prev => [...newTransactions, ...prev]);
+        }
+
+        return {
+           ...prevUserPort,
+           cash: updatedCash,
+           positions: updatedPositions,
+           pendingOrders: updatedOrders.filter(o => o.status === 'PENDING')
+        };
+      });
+      // ---------------------------------
     }, 60000); // <-- เปลี่ยนจาก 5000ms เป็น 60000ms (1 นาที)
 
     return () => clearInterval(interval);
   }, [stocks]); // นำ botPortfolio ออกจาก dependency เพื่อลดการสร้าง interval ใหม่รัวๆ
 
-  const executeUserTrade = (symbol: string, quantity: number, price: number, type: 'BUY' | 'SELL') => {
+  const executeUserTrade = (symbol: string, quantity: number, price: number, type: 'BUY' | 'SELL' | 'LIMIT_BUY' | 'LIMIT_SELL') => {
     const todayStr = getTodayDateString();
     const totalAmount = quantity * price;
+
+    if (type === 'LIMIT_BUY' || type === 'LIMIT_SELL') {
+      const orderType = type === 'LIMIT_BUY' ? 'BUY' : 'SELL';
+      
+      if (type === 'LIMIT_BUY') {
+        if (userPortfolio.cash < totalAmount) {
+          addToast('ทำรายการไม่สำเร็จ', 'ยอดเงินสดของคุณไม่พอสำหรับการตั้งซื้อ', 'warning');
+          return;
+        }
+      } else {
+        const position = userPortfolio.positions.find(p => p.symbol === symbol);
+        if (!position || position.quantity < quantity) {
+          addToast('ทำรายการไม่สำเร็จ', 'จำนวนหุ้นไม่พอสำหรับการตั้งขาย', 'warning');
+          return;
+        }
+      }
+      
+      setUserPortfolio(prev => {
+        const newOrder: import('./types').PendingOrder = {
+          id: `limit-${Date.now()}`,
+          symbol,
+          type: orderType,
+          quantity,
+          targetPrice: price,
+          timestamp: new Date().toISOString(),
+          status: 'PENDING'
+        };
+        return { ...prev, pendingOrders: [...(prev.pendingOrders || []), newOrder] };
+      });
+      
+      addToast('ตั้งคำสั่งล่วงหน้าสำเร็จ', `ตั้ง${orderType === 'BUY' ? 'ซื้อ' : 'ขาย'} ${quantity} หุ้น ที่ราคา ฿${price.toFixed(2)}`, 'buy');
+      return;
+    }
 
     if (type === 'BUY') {
       if (userPortfolio.cash < totalAmount) {

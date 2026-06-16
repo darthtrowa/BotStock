@@ -4,16 +4,20 @@ import type { Portfolio, Stock } from '../types';
 interface UserPortfolioProps {
   userPortfolio: Portfolio;
   stocks: Stock[];
-  onExecuteTrade: (symbol: string, quantity: number, price: number, type: 'BUY' | 'SELL') => void;
+  onExecuteTrade: (symbol: string, quantity: number, price: number, type: 'BUY' | 'SELL' | 'LIMIT_BUY' | 'LIMIT_SELL') => void;
+  onCancelPendingOrder?: (orderId: string) => void;
 }
 
 export const UserPortfolio: React.FC<UserPortfolioProps> = ({
   userPortfolio,
   stocks,
-  onExecuteTrade
+  onExecuteTrade,
+  onCancelPendingOrder
 }) => {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('');
   const [tradeQty, setTradeQty] = useState<number>(100);
+  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
+  const [limitPrice, setLimitPrice] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const hasInitialized = React.useRef(false);
 
@@ -32,8 +36,8 @@ export const UserPortfolio: React.FC<UserPortfolioProps> = ({
   const selectedStock = stocks.find(s => s.symbol === selectedSymbol);
   const bidPrice = selectedStock ? selectedStock.bidPrice : 0;
   const offerPrice = selectedStock ? selectedStock.offerPrice : 0;
-  const estimatedCost = tradeQty * offerPrice;
-  const estimatedRevenue = tradeQty * bidPrice;
+  const estimatedCost = orderType === 'MARKET' ? tradeQty * offerPrice : tradeQty * (parseFloat(limitPrice) || 0);
+  const estimatedRevenue = orderType === 'MARKET' ? tradeQty * bidPrice : tradeQty * (parseFloat(limitPrice) || 0);
 
   const holdingsValue = userPortfolio.positions.reduce((sum, pos) => {
     const stock = stocks.find(s => s.symbol === pos.symbol);
@@ -56,7 +60,12 @@ export const UserPortfolio: React.FC<UserPortfolioProps> = ({
 
   const handleBuy = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSymbol || offerPrice <= 0) return;
+    if (!selectedSymbol) return;
+    const priceToUse = orderType === 'MARKET' ? offerPrice : parseFloat(limitPrice);
+    if (priceToUse <= 0 || isNaN(priceToUse)) {
+      setErrorMsg(orderType === 'LIMIT' ? 'กรุณาระบุราคาเป้าหมายให้ถูกต้อง' : 'ราคาหุ้นไม่ถูกต้อง');
+      return;
+    }
     
     if (tradeQty < 100 || tradeQty % 100 !== 0) {
       setErrorMsg('จำนวนหุ้นต้องเป็นทวีคูณของ 100 และขั้นต่ำ 100 หุ้น');
@@ -64,17 +73,22 @@ export const UserPortfolio: React.FC<UserPortfolioProps> = ({
     }
 
     if (estimatedCost > userPortfolio.cash) {
-      setErrorMsg(`เงินสดไม่เพียงพอ! คุณมีเงินสด ฿${userPortfolio.cash.toFixed(2)} แต่ยอดสั่งซื้อที่ราคา Offer ต้องใช้ ฿${estimatedCost.toFixed(2)}`);
+      setErrorMsg(`เงินสดไม่เพียงพอ! คุณมีเงินสด ฿${userPortfolio.cash.toFixed(2)} แต่ยอดสั่งซื้อต้องใช้ ฿${estimatedCost.toFixed(2)}`);
       return;
     }
 
-    onExecuteTrade(selectedSymbol, tradeQty, offerPrice, 'BUY');
+    onExecuteTrade(selectedSymbol, tradeQty, priceToUse, orderType === 'MARKET' ? 'BUY' : 'LIMIT_BUY');
     setErrorMsg('');
   };
 
   const handleSell = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSymbol || bidPrice <= 0) return;
+    if (!selectedSymbol) return;
+    const priceToUse = orderType === 'MARKET' ? bidPrice : parseFloat(limitPrice);
+    if (priceToUse <= 0 || isNaN(priceToUse)) {
+      setErrorMsg(orderType === 'LIMIT' ? 'กรุณาระบุราคาเป้าหมายให้ถูกต้อง' : 'ราคาหุ้นไม่ถูกต้อง');
+      return;
+    }
 
     if (tradeQty < 100 || tradeQty % 100 !== 0) {
       setErrorMsg('จำนวนหุ้นต้องเป็นทวีคูณของ 100 และขั้นต่ำ 100 หุ้น');
@@ -87,7 +101,7 @@ export const UserPortfolio: React.FC<UserPortfolioProps> = ({
       return;
     }
 
-    onExecuteTrade(selectedSymbol, tradeQty, bidPrice, 'SELL');
+    onExecuteTrade(selectedSymbol, tradeQty, priceToUse, orderType === 'MARKET' ? 'SELL' : 'LIMIT_SELL');
     setErrorMsg('');
   };
 
@@ -239,14 +253,78 @@ export const UserPortfolio: React.FC<UserPortfolioProps> = ({
               </table>
             )}
           </div>
+
+          {/* Pending Orders Section */}
+          {userPortfolio.pendingOrders && userPortfolio.pendingOrders.length > 0 && (
+            <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+              <div className="card-title" style={{ fontSize: '13px', marginBottom: '8px' }}>
+                <span className="text-warning">รายการตั้งซื้อ-ขายล่วงหน้า (Pending Orders)</span>
+              </div>
+              <div className="custom-table-container">
+                <table className="custom-table" style={{ fontSize: '12px' }}>
+                  <thead>
+                    <tr>
+                      <th>หุ้น</th>
+                      <th>ประเภท</th>
+                      <th style={{ textAlign: 'right' }}>จำนวน</th>
+                      <th style={{ textAlign: 'right' }}>ราคาเป้าหมาย</th>
+                      <th style={{ textAlign: 'center' }}>จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userPortfolio.pendingOrders.map(order => (
+                      <tr key={order.id}>
+                        <td><span className="stock-symbol" style={{ fontSize: '12px' }}>{order.symbol}</span></td>
+                        <td>
+                          <span className={`days-tag ${order.type === 'BUY' ? 'text-success' : 'text-danger'}`} style={{ fontSize: '10px' }}>
+                            {order.type === 'BUY' ? 'LIMIT BUY' : 'LIMIT SELL'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="font-number">{order.quantity}</td>
+                        <td style={{ textAlign: 'right' }} className="font-number">฿{order.targetPrice.toFixed(2)}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button 
+                            className="btn btn-danger" 
+                            style={{ padding: '2px 8px', fontSize: '10px', minHeight: 'auto' }}
+                            onClick={(e) => { e.stopPropagation(); onCancelPendingOrder && onCancelPendingOrder(order.id); }}
+                            type="button"
+                          >
+                            ยกเลิก
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="glass-card">
-          <div className="card-title">
-            <span>ส่งคำสั่งซื้อขายทันที (Market Order)</span>
+          <div className="card-title" style={{ marginBottom: '16px' }}>
+            <span>ส่งคำสั่งซื้อขาย (Trading Panel)</span>
           </div>
 
           <form style={{ display: 'flex', flexDirection: 'column' }}>
+            
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <div 
+                onClick={() => setOrderType('MARKET')}
+                style={{ flex: 1, textAlign: 'center', padding: '8px', borderRadius: '8px', cursor: 'pointer', border: '1px solid', borderColor: orderType === 'MARKET' ? 'var(--primary)' : 'rgba(255,255,255,0.1)', background: orderType === 'MARKET' ? 'rgba(59, 130, 246, 0.1)' : 'transparent', color: orderType === 'MARKET' ? 'var(--primary)' : 'var(--text-secondary)' }}
+              >
+                <div style={{ fontSize: '13px', fontWeight: 600 }}>Market Order</div>
+                <div style={{ fontSize: '10px' }}>ซื้อ/ขายราคาทันที</div>
+              </div>
+              <div 
+                onClick={() => setOrderType('LIMIT')}
+                style={{ flex: 1, textAlign: 'center', padding: '8px', borderRadius: '8px', cursor: 'pointer', border: '1px solid', borderColor: orderType === 'LIMIT' ? 'var(--warning)' : 'rgba(255,255,255,0.1)', background: orderType === 'LIMIT' ? 'rgba(245, 158, 11, 0.1)' : 'transparent', color: orderType === 'LIMIT' ? 'var(--warning)' : 'var(--text-secondary)' }}
+              >
+                <div style={{ fontSize: '13px', fontWeight: 600 }}>Limit Order</div>
+                <div style={{ fontSize: '10px' }}>ตั้งราคาเป้าหมายล่วงหน้า</div>
+              </div>
+            </div>
+
             <div className="form-group">
               <label className="form-label">เลือกหุ้นที่ต้องการสั่งซื้อขาย</label>
               <input
@@ -275,6 +353,20 @@ export const UserPortfolio: React.FC<UserPortfolioProps> = ({
                   <div style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>ขายทันที (Bid)</div>
                   <div className="font-number text-danger" style={{ fontWeight: 700, fontSize: '16px' }}>฿{bidPrice.toFixed(2)}</div>
                 </div>
+              </div>
+            )}
+
+            {orderType === 'LIMIT' && (
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ color: 'var(--warning)' }}>ราคาเป้าหมาย (Limit Price)</label>
+                <input
+                  type="number"
+                  className="form-input font-number"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  placeholder="เช่น 10.50"
+                  step="0.01"
+                />
               </div>
             )}
 

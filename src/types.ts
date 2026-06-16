@@ -48,6 +48,17 @@ export interface Portfolio {
   startingCapital: number;
   tradesToday: number;    // จำนวนครั้งที่เทรดในวันนี้
   lastTradeDate: string;  // วันที่ล่าสุดที่มีการเทรด (YYYY-MM-DD)
+  pendingOrders?: PendingOrder[]; // คำสั่งซื้อขายที่รอจับคู่
+}
+
+export interface PendingOrder {
+  id: string;
+  symbol: string;
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  targetPrice: number;
+  timestamp: string;
+  status: 'PENDING' | 'EXECUTED' | 'CANCELLED';
 }
 
 export interface Transaction {
