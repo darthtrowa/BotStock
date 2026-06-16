@@ -17,6 +17,7 @@ import { AlertsPanel } from './components/AlertsPanel';
 import { BotPortfolio } from './components/BotPortfolio';
 import { BotLearningCenter } from './components/BotLearningCenter';
 import type { AlertLogEntry } from './components/AlertsPanel';
+import { StockDetailModal } from './components/StockDetailModal';
 
 // Helper คำนวณ Spread (Tick size) คร่าวๆ ตามตลาดหุ้นไทย
 function getSpread(price: number): number {
@@ -320,6 +321,7 @@ export default function App() {
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; desc: string; type: 'buy' | 'sell' | 'warning' }>>([]);
   const [isScanning, setIsScanning] = useState(false);
   const tickCounter = useRef<number>(0);
+  const [selectedStockForModal, setSelectedStockForModal] = useState<string | null>(null);
 
   const [marketStatus, setMarketStatus] = useState<'OPEN' | 'CLOSED' | 'HOLIDAY'>('OPEN');
   const marketStatusRef = useRef(marketStatus);
@@ -1548,7 +1550,16 @@ export default function App() {
 
         <div style={{ flexGrow: 1 }}>
           {activeTab === 'DASHBOARD' && <Dashboard botPortfolio={botPortfolio} userPortfolio={userPortfolio} stocks={stocks} transactions={transactions} botBrain={botBrain} performanceHistory={performanceHistory} onUpdateBotBrain={(updates) => setBotBrain(prev => ({...prev, ...updates}))} />}
-          {activeTab === 'SIGNALS' && <TradingSignals stocks={stocks} signals={signals.filter(s => s.status === 'ACTIVE' || s.isStarred)} userCash={userPortfolio.cash} onFollowTrade={handleFollowTrade} onToggleStarSignal={handleToggleStarSignal} />}
+          {activeTab === 'SIGNALS' && (
+            <TradingSignals 
+              stocks={stocks} 
+              signals={signals} 
+              userCash={userPortfolio.cash}
+              onFollowTrade={handleFollowTrade}
+              onToggleStarSignal={handleToggleStarSignal}
+              onStockClick={setSelectedStockForModal}
+            />
+          )}
           {activeTab === 'USER_PORT' && <UserPortfolio userPortfolio={userPortfolio} stocks={stocks} onExecuteTrade={executeUserTrade} />}
           {activeTab === 'BOT_PORT' && <BotPortfolio botPortfolio={botPortfolio} stocks={stocks} botBrain={botBrain} />}
           {activeTab === 'HISTORY' && <TransactionHistory transactions={transactions} stocks={stocks} />}
@@ -1573,6 +1584,14 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {selectedStockForModal && (
+        <StockDetailModal
+          stock={stocks.find(s => s.symbol === selectedStockForModal)!}
+          signal={signals.find(s => s.symbol === selectedStockForModal && s.status === 'ACTIVE')}
+          onClose={() => setSelectedStockForModal(null)}
+        />
+      )}
     </div>
   );
 }

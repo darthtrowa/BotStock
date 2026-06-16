@@ -11,6 +11,9 @@ import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
+// Bypass SSL verification for intercepting proxies
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const app = express();
 
 // 2. CORS (Allow all origins dynamically to support deployment on server IPs/domains)
@@ -28,7 +31,7 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 // Settrade Credentials
 const appId = process.env.SETTRADE_APP_ID;
@@ -221,6 +224,69 @@ app.get('/api/prices', async (req, res) => {
       error: 'Internal Server Error', // 5. Error Information Leakage Prevention
       data: {}
     });
+  }
+});
+
+app.get('/api/history', async (req, res) => {
+  try {
+    const symbol = req.query.symbol;
+    if (!symbol || typeof symbol !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid symbol' });
+    }
+    
+    const range = req.query.range || '3mo';
+    const cleanSymbol = symbol.endsWith('.BK') || symbol.startsWith('^') ? symbol : `${symbol}.BK`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}?range=${range}&interval=1d`;
+    
+    console.log(`[History API] Fetching historical data for ${cleanSymbol}`);
+    
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (response) => {
+      let data = '';
+      response.on('data', chunk => data += chunk);
+      response.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.chart && json.chart.result && json.chart.result[0]) {
+            const result = json.chart.result[0];
+            const timestamps = result.timestamp || [];
+            const quote = result.indicators.quote[0] || {};
+            
+            const opens = quote.open || [];
+            const highs = quote.high || [];
+            const lows = quote.low || [];
+            const closes = quote.close || [];
+            
+            const ohlcData = [];
+            for (let i = 0; i < timestamps.length; i++) {
+              if (opens[i] !== null && closes[i] !== null) {
+                // Convert timestamp to YYYY-MM-DD
+                const date = new Date(timestamps[i] * 1000);
+                const timeStr = date.toISOString().split('T')[0];
+                
+                ohlcData.push({
+                  time: timeStr,
+                  open: opens[i],
+                  high: highs[i],
+                  low: lows[i],
+                  close: closes[i]
+                });
+              }
+            }
+            
+            return res.json({ success: true, data: ohlcData });
+          }
+          return res.status(404).json({ success: false, error: 'Data not found' });
+        } catch (e) {
+          return res.status(500).json({ success: false, error: 'Error parsing Yahoo data' });
+        }
+      });
+    }).on('error', (err) => {
+      console.error('[History API] Error:', err);
+      res.status(500).json({ success: false, error: 'Network Error' });
+    });
+  } catch (error) {
+    console.error('[History API] Error:', error);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 

@@ -7,6 +7,7 @@ interface TradingSignalsProps {
   userCash: number;
   onFollowTrade: (symbol: string, price: number, targetPrice: number, stopLoss: number) => void;
   onToggleStarSignal: (id: string) => void;
+  onStockClick: (symbol: string) => void;
 }
 
 export const TradingSignals: React.FC<TradingSignalsProps> = ({
@@ -14,7 +15,8 @@ export const TradingSignals: React.FC<TradingSignalsProps> = ({
   signals,
   userCash,
   onFollowTrade,
-  onToggleStarSignal
+  onToggleStarSignal,
+  onStockClick
 }) => {
   const renderSparkline = (prices: number[], isPositive: boolean) => {
     if (!prices || prices.length < 2) return null;
@@ -61,7 +63,14 @@ export const TradingSignals: React.FC<TradingSignalsProps> = ({
             const canAfford = userCash >= minTradeCost;
 
             return (
-              <div className="glass-card screener-card" key={stock.symbol}>
+              <div 
+                className="glass-card screener-card" 
+                key={stock.symbol}
+                onClick={() => onStockClick(stock.symbol)}
+                style={{ cursor: 'pointer', transition: 'transform 0.2s, background 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+              >
                 <div className="screener-header">
                   <div className="stock-badge">
                     <span className="stock-symbol">{stock.symbol}</span>
@@ -146,11 +155,15 @@ export const TradingSignals: React.FC<TradingSignalsProps> = ({
 
                   return (
                     <React.Fragment key={sig.id}>
-                      <tr>
+                      <tr 
+                        onClick={() => onStockClick(sig.symbol)}
+                        style={{ cursor: 'pointer' }}
+                        className="clickable-row"
+                      >
                         <td>
                           <div className="stock-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button
-                              onClick={() => onToggleStarSignal(sig.id)}
+                              onClick={(e) => { e.stopPropagation(); onToggleStarSignal(sig.id); }}
                               style={{
                                 background: 'none',
                                 border: 'none',
@@ -209,7 +222,7 @@ export const TradingSignals: React.FC<TradingSignalsProps> = ({
                           {sig.status === 'ACTIVE' ? (
                             <button
                               className={`copy-badge-btn ${!canAfford ? 'btn-disabled' : ''}`}
-                              onClick={() => canAfford && onFollowTrade(sig.symbol, offerPrice, sig.targetPrice, sig.stopLoss)}
+                              onClick={(e) => { e.stopPropagation(); canAfford && onFollowTrade(sig.symbol, offerPrice, sig.targetPrice, sig.stopLoss); }}
                               disabled={!canAfford}
                               title={canAfford ? 'คัดลอกคำสั่งซื้อตามบอทลงพอร์ตจำลองของคุณในคลิกเดียว (ซื้อที่ราคา Offer)' : 'เงินสดของคุณไม่พอซื้อขั้นต่ำ 100 หุ้นที่ราคา Offer ปัจจุบัน'}
                             >
