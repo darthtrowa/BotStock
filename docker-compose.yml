@@ -15,6 +15,4 @@ services:
       - SETTRADE_APP_SECRET=${SETTRADE_APP_SECRET}
       - SETTRADE_BROKER_ID=${SETTRADE_BROKER_ID}
       - SETTRADE_APP_CODE=${SETTRADE_APP_CODE}
-    env_file:
-      - .env
     restart: always
